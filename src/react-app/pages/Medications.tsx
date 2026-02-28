@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { useAuth } from "@getmocha/users-service/react";
 import Layout from "@/react-app/components/Layout";
 import { Pill, Plus, Check, Clock } from "lucide-react";
 import { format } from "date-fns";
 import type { Medication, MedicationLog } from "@/shared/types";
+import { supabase } from "@/react-app/lib/supabase";
+import { apiFetch } from "@/react-app/lib/api";
 
 export default function Medications() {
-  const { user, isPending } = useAuth();
   const navigate = useNavigate();
   const [medications, setMedications] = useState<Medication[]>([]);
   const [logs, setLogs] = useState<MedicationLog[]>([]);
@@ -22,28 +22,41 @@ export default function Medications() {
   });
 
   useEffect(() => {
-    if (!isPending && !user) {
-      navigate("/");
-      return;
-    }
+    let mounted = true;
 
-    if (user) {
-      fetchData();
-    }
-  }, [user, isPending, navigate]);
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+
+      if (!data.session) {
+        navigate("/");
+        return;
+      }
+
+      await fetchData();
+    };
+
+    init();
+    return () => {
+      mounted = false;
+    };
+  }, [navigate]);
 
   const fetchData = async () => {
+    setLoading(true);
     try {
       const [medsResponse, logsResponse] = await Promise.all([
-        fetch("/api/medications"),
-        fetch("/api/medication-logs"),
+        apiFetch("/api/medications"),
+        apiFetch("/api/medication-logs"),
       ]);
+
       const medsData = await medsResponse.json();
       const logsData = await logsResponse.json();
+
       setMedications(medsData);
       setLogs(logsData);
     } catch (error) {
-      console.error("Failed to fetch data:", error);
+      console.error("Failed to fetch medications/logs:", error);
     } finally {
       setLoading(false);
     }
@@ -54,9 +67,8 @@ export default function Medications() {
     setLoading(true);
 
     try {
-      await fetch("/api/medications", {
+      await apiFetch("/api/medications", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
 
@@ -67,7 +79,7 @@ export default function Medications() {
         reminder_time: "",
       });
       setShowForm(false);
-      fetchData();
+      await fetchData();
     } catch (error) {
       console.error("Failed to add medication:", error);
     } finally {
@@ -77,12 +89,11 @@ export default function Medications() {
 
   const handleLogMedication = async (medicationId: number) => {
     try {
-      await fetch("/api/medication-logs", {
+      await apiFetch("/api/medication-logs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ medication_id: medicationId }),
       });
-      fetchData();
+      await fetchData();
     } catch (error) {
       console.error("Failed to log medication:", error);
     }
@@ -91,13 +102,11 @@ export default function Medications() {
   const getTodayLogs = (medicationId: number) => {
     const today = new Date().toISOString().split("T")[0];
     return logs.filter(
-      (log) =>
-        log.medication_id === medicationId &&
-        log.taken_at.startsWith(today)
+      (log) => log.medication_id === medicationId && log.taken_at.startsWith(today)
     );
   };
 
-  if (isPending || loading) {
+  if (loading) {
     return (
       <Layout>
         <div className="flex items-center justify-center h-96">
@@ -115,6 +124,7 @@ export default function Medications() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Medications</h1>
             <p className="text-gray-600">Track your medication schedule and compliance</p>
           </div>
+
           <button
             onClick={() => setShowForm(!showForm)}
             className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
@@ -127,6 +137,7 @@ export default function Medications() {
         {showForm && (
           <div className="bg-white/80 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">New Medication</h3>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -143,9 +154,7 @@ export default function Medications() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Dosage
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Dosage</label>
                 <input
                   type="text"
                   value={formData.dosage}
@@ -162,7 +171,9 @@ export default function Medications() {
                 <input
                   type="text"
                   value={formData.frequency}
-                  onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, frequency: e.target.value })
+                  }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="e.g., Once daily"
                 />
@@ -175,7 +186,9 @@ export default function Medications() {
                 <input
                   type="time"
                   value={formData.reminder_time}
-                  onChange={(e) => setFormData({ ...formData, reminder_time: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, reminder_time: e.target.value })
+                  }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -188,6 +201,7 @@ export default function Medications() {
                 >
                   Cancel
                 </button>
+
                 <button
                   type="submit"
                   className="flex-1 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-semibold rounded-lg hover:shadow-lg transition-all"
@@ -203,8 +217,12 @@ export default function Medications() {
           {medications.length === 0 ? (
             <div className="bg-white/80 backdrop-blur-sm rounded-xl p-12 shadow-lg border border-gray-100 text-center">
               <Pill className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No medications added yet</h3>
-              <p className="text-gray-600">Add your medications to track compliance and set reminders</p>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                No medications added yet
+              </h3>
+              <p className="text-gray-600">
+                Add your medications to track compliance and set reminders
+              </p>
             </div>
           ) : (
             medications.map((medication) => {
@@ -218,18 +236,30 @@ export default function Medications() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1">
-                      <div className={`w-12 h-12 bg-gradient-to-br ${isTakenToday ? 'from-emerald-500 to-teal-500' : 'from-blue-500 to-cyan-500'} rounded-xl flex items-center justify-center`}>
+                      <div
+                        className={`w-12 h-12 bg-gradient-to-br ${
+                          isTakenToday
+                            ? "from-emerald-500 to-teal-500"
+                            : "from-blue-500 to-cyan-500"
+                        } rounded-xl flex items-center justify-center`}
+                      >
                         {isTakenToday ? (
                           <Check className="w-6 h-6 text-white" />
                         ) : (
                           <Pill className="w-6 h-6 text-white" />
                         )}
                       </div>
+
                       <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-gray-900">{medication.name}</h3>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {medication.name}
+                        </h3>
+
                         <div className="text-sm text-gray-600 mt-1 space-y-1">
                           {medication.dosage && <p>Dosage: {medication.dosage}</p>}
-                          {medication.frequency && <p>Frequency: {medication.frequency}</p>}
+                          {medication.frequency && (
+                            <p>Frequency: {medication.frequency}</p>
+                          )}
                           {medication.reminder_time && (
                             <div className="flex items-center gap-1">
                               <Clock className="w-4 h-4" />
@@ -237,13 +267,16 @@ export default function Medications() {
                             </div>
                           )}
                         </div>
+
                         {isTakenToday && (
                           <p className="text-sm text-emerald-600 font-medium mt-2">
-                            ✓ Taken today at {format(new Date(todayLogs[0].taken_at), "h:mm a")}
+                            ✓ Taken today at{" "}
+                            {format(new Date(todayLogs[0].taken_at), "h:mm a")}
                           </p>
                         )}
                       </div>
                     </div>
+
                     {!isTakenToday && (
                       <button
                         onClick={() => handleLogMedication(medication.id)}
