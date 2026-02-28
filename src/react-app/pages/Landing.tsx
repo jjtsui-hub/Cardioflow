@@ -1,19 +1,45 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { useAuth } from "@getmocha/users-service/react";
 import { Heart, Activity, TrendingDown, Calendar } from "lucide-react";
+import { supabase } from "@/react-app/lib/supabase";
 
 export default function Landing() {
-  const { user, isPending, redirectToLogin } = useAuth();
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
-      navigate("/dashboard");
-    }
-  }, [user, navigate]);
+    let mounted = true;
 
-  if (isPending) {
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+
+      if (data.session) navigate("/dashboard");
+      setLoading(false);
+    };
+
+    init();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) navigate("/dashboard");
+    });
+
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [navigate]);
+
+  const signInWithGoogle = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+  };
+
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-50 via-white to-blue-50">
         <div className="animate-pulse">
@@ -33,9 +59,7 @@ export default function Landing() {
               <Heart className="w-16 h-16 text-rose-500 relative animate-pulse" fill="currentColor" />
             </div>
           </div>
-          <h1 className="text-5xl font-bold text-gray-900 mb-4 tracking-tight">
-            CardioFlow
-          </h1>
+          <h1 className="text-5xl font-bold text-gray-900 mb-4 tracking-tight">CardioFlow</h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
             Your personalized heart health companion. Track vitals, build healthy habits, and take control of your cardiovascular wellness.
           </p>
@@ -75,15 +99,13 @@ export default function Landing() {
 
         <div className="text-center">
           <button
-            onClick={redirectToLogin}
+            onClick={signInWithGoogle}
             className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
           >
             <Heart className="w-5 h-5" />
             Get Started with Google
           </button>
-          <p className="text-sm text-gray-500 mt-4">
-            Free to use. Secure and private.
-          </p>
+          <p className="text-sm text-gray-500 mt-4">Free to use. Secure and private.</p>
         </div>
       </div>
     </div>
