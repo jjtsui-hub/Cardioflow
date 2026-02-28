@@ -31,6 +31,6 @@
   "include": [
     "src/react-app/**/*",
     "src/react-app/**/*.d.ts",
-    "vite-env.d.ts"
+    "src/react-app/vite-env.d.ts"
   ]
 }
