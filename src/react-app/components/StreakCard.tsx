@@ -1,8 +1,10 @@
+import type { ReactNode } from "react";
+
 interface StreakCardProps {
   title: string;
   value: number;
-  icon: JSX.Element;
-  gradient: string; // e.g. "from-purple-500 to-indigo-500"
+  icon: ReactNode;           // ✅ instead of JSX.Element
+  gradient: string;
   onClick?: () => void;
 }
 
