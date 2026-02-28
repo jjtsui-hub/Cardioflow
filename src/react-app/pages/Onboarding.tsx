@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { useAuth } from "@getmocha/users-service/react";
 import { Heart } from "lucide-react";
+import { supabase } from "@/react-app/lib/supabase";
+import { apiFetch } from "@/react-app/lib/api";
 
 export default function Onboarding() {
-  const { user, isPending } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   const [formData, setFormData] = useState({
     age: "",
@@ -22,10 +23,25 @@ export default function Onboarding() {
   ]);
 
   useEffect(() => {
-    if (!isPending && !user) {
-      navigate("/");
-    }
-  }, [user, isPending, navigate]);
+    let mounted = true;
+
+    const check = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+
+      if (!data.session) {
+        navigate("/");
+        return;
+      }
+      setCheckingSession(false);
+    };
+
+    check();
+
+    return () => {
+      mounted = false;
+    };
+  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,17 +56,15 @@ export default function Onboarding() {
         unit_system: formData.unit_system,
       };
 
-      await fetch("/api/profile", {
+      await apiFetch("/api/profile", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(profileData),
       });
 
       for (const goal of goals) {
         if (goal.goal_description) {
-          await fetch("/api/goals", {
+          await apiFetch("/api/goals", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(goal),
           });
         }
@@ -64,7 +78,7 @@ export default function Onboarding() {
     }
   };
 
-  if (isPending) {
+  if (checkingSession) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-50 via-white to-blue-50">
         <Heart className="w-12 h-12 text-rose-500 animate-pulse" />
@@ -83,19 +97,17 @@ export default function Onboarding() {
 
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-gray-100">
           <div className="flex justify-between mb-8">
-            <div className={`flex-1 h-1 rounded-full ${step >= 1 ? 'bg-rose-500' : 'bg-gray-200'}`}></div>
-            <div className={`flex-1 h-1 rounded-full ml-2 ${step >= 2 ? 'bg-rose-500' : 'bg-gray-200'}`}></div>
+            <div className={`flex-1 h-1 rounded-full ${step >= 1 ? "bg-rose-500" : "bg-gray-200"}`}></div>
+            <div className={`flex-1 h-1 rounded-full ml-2 ${step >= 2 ? "bg-rose-500" : "bg-gray-200"}`}></div>
           </div>
 
           <form onSubmit={handleSubmit}>
             {step === 1 && (
               <div className="space-y-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">Basic Information</h2>
-                
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Age
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Age</label>
                   <input
                     type="number"
                     value={formData.age}
@@ -106,9 +118,7 @@ export default function Onboarding() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Weight (lbs)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Weight (lbs)</label>
                   <input
                     type="number"
                     step="0.1"
@@ -120,9 +130,7 @@ export default function Onboarding() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Height (inches)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Height (inches)</label>
                   <input
                     type="number"
                     step="0.1"
@@ -134,9 +142,7 @@ export default function Onboarding() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Cardiac Condition (Optional)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Cardiac Condition (Optional)</label>
                   <input
                     type="text"
                     value={formData.cardiac_condition}
@@ -159,11 +165,9 @@ export default function Onboarding() {
             {step === 2 && (
               <div className="space-y-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-4">Your Health Goals</h2>
-                
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Primary Goal (Optional)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Primary Goal (Optional)</label>
                   <input
                     type="text"
                     value={goals[0].goal_description}
@@ -175,9 +179,7 @@ export default function Onboarding() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-transparent"
                     placeholder="e.g., Lower blood pressure to 120/80"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Set a specific, measurable goal you'd like to achieve
-                  </p>
+                  <p className="text-xs text-gray-500 mt-1">Set a specific, measurable goal you'd like to achieve</p>
                 </div>
 
                 <div className="flex gap-4">
