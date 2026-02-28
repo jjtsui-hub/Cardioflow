@@ -253,7 +253,7 @@ exports.handler = async (event) => {
     const payload = {
       user_id: user.id,
       description: body.description,
-      is_heart_healthy: !!body.is_heart_healthy,
+      is_heart_healthy: body.is_heart_healthy ? 1 : 0,
       logged_date: body.logged_date, // expect "YYYY-MM-DD"
       notes: body.notes ?? null,
     };
