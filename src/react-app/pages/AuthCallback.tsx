@@ -1,36 +1,61 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
-import { useAuth } from "@getmocha/users-service/react";
 import { Heart } from "lucide-react";
+import { supabase } from "@/react-app/lib/supabase";
 
 export default function AuthCallback() {
-  const { exchangeCodeForSessionToken } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    const handleCallback = async () => {
+    let cancelled = false;
+
+    const finish = async () => {
       try {
-        await exchangeCodeForSessionToken();
-        navigate("/onboarding");
-      } catch (error) {
-        console.error("Auth callback error:", error);
-        navigate("/");
+        // In Supabase v2, this often auto-detects session from URL.
+        let { data, error } = await supabase.auth.getSession();
+
+        // If there's no session yet but there is a code param, try exchanging explicitly.
+        if (!data.session) {
+          const url = new URL(window.location.href);
+          const code = url.searchParams.get("code");
+          if (code) {
+            const exchanged = await supabase.auth.exchangeCodeForSession(window.location.href);
+            data = exchanged.data;
+            error = exchanged.error;
+          }
+        }
+
+        if (cancelled) return;
+
+        if (error) {
+          console.error("Auth callback error:", error);
+          navigate("/", { replace: true });
+          return;
+        }
+
+        if (data.session) {
+          navigate("/dashboard", { replace: true });
+        } else {
+          navigate("/", { replace: true });
+        }
+      } catch (e) {
+        console.error("Auth callback exception:", e);
+        navigate("/", { replace: true });
       }
     };
 
-    handleCallback();
-  }, [exchangeCodeForSessionToken, navigate]);
+    finish();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-50 via-white to-blue-50">
       <div className="text-center">
-        <div className="flex items-center justify-center mb-6">
-          <div className="relative">
-            <div className="absolute inset-0 bg-rose-500 blur-xl opacity-30 rounded-full"></div>
-            <Heart className="w-16 h-16 text-rose-500 relative animate-pulse" fill="currentColor" />
-          </div>
-        </div>
-        <p className="text-gray-600">Setting up your account...</p>
+        <Heart className="w-12 h-12 text-rose-500 animate-pulse mx-auto mb-4" />
+        <p className="text-gray-600">Signing you in...</p>
       </div>
     </div>
   );
