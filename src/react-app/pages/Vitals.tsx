@@ -1,14 +1,23 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { useAuth } from "@getmocha/users-service/react";
 import Layout from "@/react-app/components/Layout";
 import { Heart, Plus, TrendingUp } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 import { format } from "date-fns";
 import type { VitalLog } from "@/shared/types";
+import { supabase } from "@/react-app/lib/supabase";
+import { apiFetch } from "@/react-app/lib/api";
 
 export default function Vitals() {
-  const { user, isPending } = useAuth();
   const navigate = useNavigate();
   const [vitals, setVitals] = useState<VitalLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,19 +33,30 @@ export default function Vitals() {
   });
 
   useEffect(() => {
-    if (!isPending && !user) {
-      navigate("/");
-      return;
-    }
+    let mounted = true;
 
-    if (user) {
-      fetchVitals();
-    }
-  }, [user, isPending, navigate]);
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+
+      if (!data.session) {
+        navigate("/");
+        return;
+      }
+
+      await fetchVitals();
+    };
+
+    init();
+    return () => {
+      mounted = false;
+    };
+  }, [navigate]);
 
   const fetchVitals = async () => {
+    setLoading(true);
     try {
-      const response = await fetch("/api/vitals");
+      const response = await apiFetch("/api/vitals");
       const data = await response.json();
       setVitals(data);
     } catch (error) {
@@ -61,13 +81,10 @@ export default function Vitals() {
         payload.weight_lbs = parseFloat(formData.weight_lbs);
       }
 
-      if (formData.notes) {
-        payload.notes = formData.notes;
-      }
+      if (formData.notes) payload.notes = formData.notes;
 
-      await fetch("/api/vitals", {
+      await apiFetch("/api/vitals", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
@@ -79,7 +96,7 @@ export default function Vitals() {
         notes: "",
       });
       setShowForm(false);
-      fetchVitals();
+      await fetchVitals();
     } catch (error) {
       console.error("Failed to log vital:", error);
     } finally {
@@ -87,7 +104,7 @@ export default function Vitals() {
     }
   };
 
-  if (isPending || loading) {
+  if (loading) {
     return (
       <Layout>
         <div className="flex items-center justify-center h-96">
@@ -123,8 +140,11 @@ export default function Vitals() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Vitals Tracking</h1>
-            <p className="text-gray-600">Monitor your blood pressure, heart rate, and weight</p>
+            <p className="text-gray-600">
+              Monitor your blood pressure, heart rate, and weight
+            </p>
           </div>
+
           <button
             onClick={() => setShowForm(!showForm)}
             className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
@@ -137,6 +157,7 @@ export default function Vitals() {
         {showForm && (
           <div className="bg-white/80 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">New Vital Entry</h3>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="flex gap-4 mb-4">
                 <button
@@ -150,6 +171,7 @@ export default function Vitals() {
                 >
                   Blood Pressure
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setLogType("weight")}
@@ -178,6 +200,7 @@ export default function Vitals() {
                       placeholder="120"
                     />
                   </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Diastolic (mmHg)
@@ -191,6 +214,7 @@ export default function Vitals() {
                       placeholder="80"
                     />
                   </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Heart Rate (bpm)
@@ -243,6 +267,7 @@ export default function Vitals() {
                 >
                   Cancel
                 </button>
+
                 <button
                   type="submit"
                   className="flex-1 py-2 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-semibold rounded-lg hover:shadow-lg transition-all"
@@ -260,6 +285,7 @@ export default function Vitals() {
               <TrendingUp className="w-5 h-5 text-rose-500" />
               <h2 className="text-xl font-semibold text-gray-900">Blood Pressure Trend</h2>
             </div>
+
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={bpData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -274,22 +300,8 @@ export default function Vitals() {
                   }}
                 />
                 <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="systolic"
-                  stroke="#f43f5e"
-                  strokeWidth={2}
-                  dot={{ fill: "#f43f5e", r: 4 }}
-                  name="Systolic"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="diastolic"
-                  stroke="#ec4899"
-                  strokeWidth={2}
-                  dot={{ fill: "#ec4899", r: 4 }}
-                  name="Diastolic"
-                />
+                <Line type="monotone" dataKey="systolic" stroke="#f43f5e" strokeWidth={2} dot={{ fill: "#f43f5e", r: 4 }} name="Systolic" />
+                <Line type="monotone" dataKey="diastolic" stroke="#ec4899" strokeWidth={2} dot={{ fill: "#ec4899", r: 4 }} name="Diastolic" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -301,6 +313,7 @@ export default function Vitals() {
               <TrendingUp className="w-5 h-5 text-blue-500" />
               <h2 className="text-xl font-semibold text-gray-900">Weight Trend</h2>
             </div>
+
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={weightData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -315,14 +328,7 @@ export default function Vitals() {
                   }}
                 />
                 <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="weight"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  dot={{ fill: "#3b82f6", r: 4 }}
-                  name="Weight (lbs)"
-                />
+                <Line type="monotone" dataKey="weight" stroke="#3b82f6" strokeWidth={2} dot={{ fill: "#3b82f6", r: 4 }} name="Weight (lbs)" />
               </LineChart>
             </ResponsiveContainer>
           </div>
