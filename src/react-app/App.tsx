@@ -1,5 +1,6 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import type { ReactElement } from "react";
 import { supabase } from "@/react-app/lib/supabase";
 
 import LandingPage from "@/react-app/pages/Landing";
@@ -11,7 +12,7 @@ import DietPage from "@/react-app/pages/Diet";
 import MedicationsPage from "@/react-app/pages/Medications";
 import ActivityPage from "@/react-app/pages/Activity";
 
-function RequireAuth({ children }: { children: JSX.Element }) {
+function RequireAuth({ children }: { children: ReactElement }) {
   const [loading, setLoading] = useState(true);
   const [hasSession, setHasSession] = useState(false);
 
