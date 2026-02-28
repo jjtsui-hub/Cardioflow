@@ -1,52 +1,61 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { useAuth } from "@getmocha/users-service/react";
 import Layout from "@/react-app/components/Layout";
 import StreakCard from "@/react-app/components/StreakCard";
 import { Activity, Apple, Pill, Heart, TrendingUp, Award } from "lucide-react";
+import { supabase } from "@/react-app/lib/supabase";
+import { apiFetch } from "@/react-app/lib/api";
 
-interface DashboardStats {
-  activity_streak: number;
-  diet_streak: number;
-  medication_streak: number;
-  latest_bp: {
-    systolic: number;
-    diastolic: number;
-    heart_rate: number;
-    logged_at: string;
-  } | null;
-}
+type DashboardStats = {
+  activity_streak?: number;
+  diet_streak?: number;
+  medication_streak?: number;
+  latest_bp?: any;
+};
 
 export default function Dashboard() {
-  const { user, isPending } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    if (!isPending && !user) {
-      navigate("/");
-      return;
-    }
+    let mounted = true;
 
-    if (user) {
-      fetchStats();
-    }
-  }, [user, isPending, navigate]);
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+
+      if (!data.session) {
+        navigate("/");
+        return;
+      }
+
+      setCheckingSession(false);
+      await fetchStats();
+    };
+
+    init();
+    return () => {
+      mounted = false;
+    };
+  }, [navigate]);
 
   const fetchStats = async () => {
+    setLoading(true);
     try {
-      const response = await fetch("/api/dashboard/stats");
-      const data = await response.json();
+      const res = await apiFetch("/api/dashboard/stats");
+      const data = await res.json();
       setStats(data);
     } catch (error) {
-      console.error("Failed to fetch stats:", error);
+      console.error("Failed to fetch dashboard stats:", error);
+      setStats(null);
     } finally {
       setLoading(false);
     }
   };
 
-  if (isPending || loading) {
+  if (checkingSession || loading) {
     return (
       <Layout>
         <div className="flex items-center justify-center h-96">
@@ -56,111 +65,86 @@ export default function Dashboard() {
     );
   }
 
-  const getBPStatus = (systolic: number, diastolic: number) => {
-    if (systolic < 120 && diastolic < 80) {
-      return { label: "Normal", color: "text-emerald-600", bgColor: "bg-emerald-100" };
-    } else if (systolic < 130 && diastolic < 80) {
-      return { label: "Elevated", color: "text-yellow-600", bgColor: "bg-yellow-100" };
-    } else if (systolic < 140 || diastolic < 90) {
-      return { label: "Stage 1 HTN", color: "text-orange-600", bgColor: "bg-orange-100" };
-    } else {
-      return { label: "Stage 2 HTN", color: "text-red-600", bgColor: "bg-red-100" };
-    }
-  };
+  const activityStreak = stats?.activity_streak ?? 0;
+  const dietStreak = stats?.diet_streak ?? 0;
+  const medicationStreak = stats?.medication_streak ?? 0;
 
   return (
     <Layout>
       <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome back, {user?.google_user_data.given_name || "there"}
-          </h1>
-          <p className="text-gray-600">Here's your heart health overview</p>
-        </div>
-
-        {stats?.latest_bp && (
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-gray-100">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">Latest Blood Pressure</h2>
-              <div className={`px-4 py-2 ${getBPStatus(stats.latest_bp.systolic, stats.latest_bp.diastolic).bgColor} ${getBPStatus(stats.latest_bp.systolic, stats.latest_bp.diastolic).color} rounded-lg font-semibold text-sm`}>
-                {getBPStatus(stats.latest_bp.systolic, stats.latest_bp.diastolic).label}
-              </div>
-            </div>
-            <div className="grid md:grid-cols-3 gap-6">
-              <div className="text-center">
-                <p className="text-sm text-gray-600 mb-1">Systolic</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.latest_bp.systolic}</p>
-                <p className="text-xs text-gray-500 mt-1">mmHg</p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-gray-600 mb-1">Diastolic</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.latest_bp.diastolic}</p>
-                <p className="text-xs text-gray-500 mt-1">mmHg</p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-gray-600 mb-1">Heart Rate</p>
-                <p className="text-4xl font-bold text-gray-900">{stats.latest_bp.heart_rate}</p>
-                <p className="text-xs text-gray-500 mt-1">bpm</p>
-              </div>
-            </div>
-            <p className="text-sm text-gray-500 text-center mt-6">
-              Logged {new Date(stats.latest_bp.logged_at).toLocaleDateString()} at {new Date(stats.latest_bp.logged_at).toLocaleTimeString()}
-            </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+            <p className="text-gray-600">Your heart health overview</p>
           </div>
-        )}
 
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">7-Day Streaks</h2>
-          <div className="grid md:grid-cols-3 gap-6">
-            <StreakCard
-              title="Physical Activity"
-              count={stats?.activity_streak || 0}
-              icon={Activity}
-              color="rose"
-            />
-            <StreakCard
-              title="Medication Compliance"
-              count={stats?.medication_streak || 0}
-              icon={Pill}
-              color="blue"
-            />
-            <StreakCard
-              title="Heart-Healthy Diet"
-              count={stats?.diet_streak || 0}
-              icon={Apple}
-              color="emerald"
-            />
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-6">
           <button
             onClick={() => navigate("/vitals")}
-            className="bg-white/80 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all text-left group"
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
           >
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-rose-500 to-pink-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Heart className="w-6 h-6 text-white" />
-              </div>
-              <TrendingUp className="w-5 h-5 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">Log Vitals</h3>
-            <p className="text-sm text-gray-600">Track blood pressure, heart rate, and weight</p>
+            <TrendingUp className="w-5 h-5" />
+            View Vitals
           </button>
+        </div>
 
-          <button
+        <div className="grid md:grid-cols-3 gap-6">
+          <StreakCard
+            title="Activity Streak"
+            value={activityStreak}
+            icon={<Activity className="w-6 h-6 text-white" />}
+            gradient="from-purple-500 to-indigo-500"
             onClick={() => navigate("/activity")}
-            className="bg-white/80 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-all text-left group"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Activity className="w-6 h-6 text-white" />
-              </div>
-              <Award className="w-5 h-5 text-gray-400" />
+          />
+          <StreakCard
+            title="Diet Streak"
+            value={dietStreak}
+            icon={<Apple className="w-6 h-6 text-white" />}
+            gradient="from-emerald-500 to-teal-500"
+            onClick={() => navigate("/diet")}
+          />
+          <StreakCard
+            title="Medication Streak"
+            value={medicationStreak}
+            icon={<Pill className="w-6 h-6 text-white" />}
+            gradient="from-blue-500 to-cyan-500"
+            onClick={() => navigate("/medications")}
+          />
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-6">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100">
+            <div className="flex items-center gap-2 mb-4">
+              <Award className="w-5 h-5 text-rose-500" />
+              <h2 className="text-xl font-semibold text-gray-900">Latest Blood Pressure</h2>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">Log Activity</h3>
-            <p className="text-sm text-gray-600">Record your daily physical exercise</p>
-          </button>
+
+            {stats?.latest_bp ? (
+              <div className="space-y-2">
+                <div className="text-4xl font-bold text-gray-900">
+                  {stats.latest_bp.systolic}/{stats.latest_bp.diastolic}
+                </div>
+                {typeof stats.latest_bp.heart_rate === "number" && (
+                  <div className="text-gray-600">Heart rate: {stats.latest_bp.heart_rate} bpm</div>
+                )}
+              </div>
+            ) : (
+              <p className="text-gray-600">No blood pressure entries yet.</p>
+            )}
+          </div>
+
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-gray-100">
+            <div className="flex items-center gap-2 mb-4">
+              <Heart className="w-5 h-5 text-rose-500" />
+              <h2 className="text-xl font-semibold text-gray-900">Next Step</h2>
+            </div>
+            <p className="text-gray-600 mb-4">Keep logging daily to build consistent habits.</p>
+            <button
+              onClick={() => navigate("/onboarding")}
+              className="px-5 py-2 bg-gray-900 text-white font-semibold rounded-lg hover:opacity-90 transition-all"
+            >
+              Update Profile
+            </button>
+          </div>
         </div>
       </div>
     </Layout>
