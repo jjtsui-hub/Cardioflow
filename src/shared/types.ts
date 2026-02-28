@@ -122,17 +122,19 @@ export const CreateMedicationLogSchema = z.object({
 export type CreateMedicationLog = z.infer<typeof CreateMedicationLogSchema>;
 
 // Activity Logs
-export const ActivityLogSchema = z.object({
+export const activityLogSchema = z.object({
   id: z.number(),
   user_id: z.string(),
   activity_type: z.string(),
-  duration_minutes: z.number().nullable(),
+  duration_minutes: z.number(),
   logged_date: z.string(),
+  intensity: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 });
 
-export type ActivityLog = z.infer<typeof ActivityLogSchema>;
+export type ActivityLog = z.infer<typeof activityLogSchema>;
 
 export const CreateActivityLogSchema = z.object({
   activity_type: z.string().min(1),
@@ -143,17 +145,18 @@ export const CreateActivityLogSchema = z.object({
 export type CreateActivityLog = z.infer<typeof CreateActivityLogSchema>;
 
 // Diet Logs
-export const DietLogSchema = z.object({
+export const dietLogSchema = z.object({
   id: z.number(),
   user_id: z.string(),
   description: z.string(),
   is_heart_healthy: z.number(),
   logged_date: z.string(),
+  notes: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 });
 
-export type DietLog = z.infer<typeof DietLogSchema>;
+export type DietLog = z.infer<typeof dietLogSchema>;
 
 export const CreateDietLogSchema = z.object({
   description: z.string().min(1),
