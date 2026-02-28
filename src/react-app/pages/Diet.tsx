@@ -1,39 +1,53 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { useAuth } from "@getmocha/users-service/react";
 import Layout from "@/react-app/components/Layout";
 import { Apple, Plus, Calendar, Check, X } from "lucide-react";
 import { format } from "date-fns";
 import type { DietLog } from "@/shared/types";
+import { supabase } from "@/react-app/lib/supabase";
+import { apiFetch } from "@/react-app/lib/api";
 
 export default function Diet() {
-  const { user, isPending } = useAuth();
   const navigate = useNavigate();
   const [dietLogs, setDietLogs] = useState<DietLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [showForm, setShowForm] = useState(false);
 
   const [formData, setFormData] = useState({
     description: "",
     is_heart_healthy: true,
     logged_date: new Date().toISOString().split("T")[0],
+    notes: "",
   });
 
   useEffect(() => {
-    if (!isPending && !user) {
-      navigate("/");
-      return;
-    }
+    let mounted = true;
 
-    if (user) {
-      fetchDietLogs();
-    }
-  }, [user, isPending, navigate]);
+    const init = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+
+      if (!data.session) {
+        navigate("/");
+        return;
+      }
+
+      setCheckingSession(false);
+      await fetchDietLogs();
+    };
+
+    init();
+    return () => {
+      mounted = false;
+    };
+  }, [navigate]);
 
   const fetchDietLogs = async () => {
+    setLoading(true);
     try {
-      const response = await fetch("/api/diet");
-      const data = await response.json();
+      const res = await apiFetch("/api/diet");
+      const data = await res.json();
       setDietLogs(data);
     } catch (error) {
       console.error("Failed to fetch diet logs:", error);
@@ -47,9 +61,8 @@ export default function Diet() {
     setLoading(true);
 
     try {
-      await fetch("/api/diet", {
+      await apiFetch("/api/diet", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
 
@@ -57,17 +70,19 @@ export default function Diet() {
         description: "",
         is_heart_healthy: true,
         logged_date: new Date().toISOString().split("T")[0],
+        notes: "",
       });
+
       setShowForm(false);
-      fetchDietLogs();
+      await fetchDietLogs();
     } catch (error) {
-      console.error("Failed to log diet:", error);
+      console.error("Failed to add diet log:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  if (isPending || loading) {
+  if (checkingSession || loading) {
     return (
       <Layout>
         <div className="flex items-center justify-center h-96">
@@ -77,97 +92,71 @@ export default function Diet() {
     );
   }
 
-  const dietSuggestions = [
-    "Ate low-sodium meal",
-    "Had 5 servings of vegetables",
-    "Avoided processed foods",
-    "Drank 8 glasses of water",
-    "Limited sugar intake",
-    "Ate whole grain breakfast",
-  ];
-
   return (
     <Layout>
       <div className="space-y-8">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Diet Tracking</h1>
-            <p className="text-gray-600">Log your heart-healthy eating habits</p>
+            <p className="text-gray-600">Log meals and track heart-healthy choices</p>
           </div>
+
           <button
             onClick={() => setShowForm(!showForm)}
             className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
           >
             <Plus className="w-5 h-5" />
-            Log Diet
+            Log Meal
           </button>
         </div>
 
         {showForm && (
           <div className="bg-white/80 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">New Diet Entry</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">New Meal Entry</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                <input
+                  type="date"
+                  value={formData.logged_date}
+                  onChange={(e) => setFormData({ ...formData, logged_date: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Meal Description</label>
                 <input
                   type="text"
                   required
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  placeholder="What did you eat or achieve today?"
-                  list="diet-suggestions"
+                  placeholder="e.g., Grilled salmon with vegetables"
                 />
-                <datalist id="diet-suggestions">
-                  {dietSuggestions.map((suggestion) => (
-                    <option key={suggestion} value={suggestion} />
-                  ))}
-                </datalist>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Heart-Healthy?
-                </label>
-                <div className="flex gap-4">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, is_heart_healthy: true })}
-                    className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${
-                      formData.is_heart_healthy
-                        ? "bg-emerald-500 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                  >
-                    Yes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, is_heart_healthy: false })}
-                    className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all ${
-                      !formData.is_heart_healthy
-                        ? "bg-orange-500 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                  >
-                    No
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date
-                </label>
+              <div className="flex items-center gap-3">
                 <input
-                  type="date"
-                  required
-                  value={formData.logged_date}
-                  onChange={(e) => setFormData({ ...formData, logged_date: e.target.value })}
+                  id="heartHealthy"
+                  type="checkbox"
+                  checked={formData.is_heart_healthy}
+                  onChange={(e) => setFormData({ ...formData, is_heart_healthy: e.target.checked })}
+                  className="h-4 w-4"
+                />
+                <label htmlFor="heartHealthy" className="text-sm text-gray-700">
+                  Heart healthy choice
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                  max={new Date().toISOString().split("T")[0]}
+                  rows={2}
+                  placeholder="Any details..."
                 />
               </div>
 
@@ -183,7 +172,7 @@ export default function Diet() {
                   type="submit"
                   className="flex-1 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold rounded-lg hover:shadow-lg transition-all"
                 >
-                  Save Entry
+                  Save
                 </button>
               </div>
             </form>
@@ -194,41 +183,39 @@ export default function Diet() {
           {dietLogs.length === 0 ? (
             <div className="bg-white/80 backdrop-blur-sm rounded-xl p-12 shadow-lg border border-gray-100 text-center">
               <Apple className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No diet entries yet</h3>
-              <p className="text-gray-600">Start tracking your heart-healthy eating habits</p>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No meals logged yet</h3>
+              <p className="text-gray-600">Start by logging your first meal</p>
             </div>
           ) : (
             dietLogs.map((log) => (
-              <div
-                key={log.id}
-                className="bg-white/80 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-gray-100"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className={`w-12 h-12 bg-gradient-to-br ${log.is_heart_healthy ? 'from-emerald-500 to-teal-500' : 'from-orange-500 to-amber-500'} rounded-xl flex items-center justify-center`}>
-                      {log.is_heart_healthy ? (
-                        <Check className="w-6 h-6 text-white" />
-                      ) : (
-                        <X className="w-6 h-6 text-white" />
-                      )}
+              <div key={log.id} className="bg-white/80 backdrop-blur-sm rounded-xl p-6 shadow-lg border border-gray-100">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-4">
+                    <div
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                        log.is_heart_healthy ? "bg-gradient-to-br from-emerald-500 to-teal-500" : "bg-gradient-to-br from-gray-400 to-gray-500"
+                      }`}
+                    >
+                      {log.is_heart_healthy ? <Check className="w-6 h-6 text-white" /> : <X className="w-6 h-6 text-white" />}
                     </div>
-                    <div className="flex-1">
+
+                    <div>
                       <h3 className="text-lg font-semibold text-gray-900">{log.description}</h3>
-                      <div className="flex items-center gap-4 text-sm text-gray-600 mt-1">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          {format(new Date(log.logged_date), "MMM d, yyyy")}
-                        </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          log.is_heart_healthy
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-orange-100 text-orange-700"
-                        }`}>
-                          {log.is_heart_healthy ? "Heart-Healthy" : "Treat"}
-                        </span>
-                      </div>
+                      <p className="text-sm text-gray-600 flex items-center gap-1 mt-1">
+                        <Calendar className="w-4 h-4" />
+                        {format(new Date(log.logged_date), "MMM d, yyyy")}
+                      </p>
+                      {log.notes && <p className="text-sm text-gray-600 mt-2">{log.notes}</p>}
                     </div>
                   </div>
+
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      log.is_heart_healthy ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"
+                    }`}
+                  >
+                    {log.is_heart_healthy ? "Heart healthy" : "Not marked"}
+                  </span>
                 </div>
               </div>
             ))
